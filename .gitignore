@@ -119,6 +119,11 @@ all.config
 android/configs/android-*.cfg
 
 #
+# out directory
+#
+/out/
+
+#
 #Ignoring Android.bp link file
 #
 Android.bp
