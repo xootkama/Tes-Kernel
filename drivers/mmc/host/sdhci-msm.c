@@ -3913,8 +3913,8 @@ void sdhci_msm_pm_qos_irq_init(struct sdhci_host *host)
 		(msm_host->pm_qos_irq.req.type != PM_QOS_REQ_ALL_CORES))
 		set_affine_irq(msm_host, host);
 	else
-		cpumask_copy(&msm_host->pm_qos_irq.req.cpus_affine,
-			cpumask_of(msm_host->pdata->pm_qos_data.irq_cpu));
+		atomic_set(&msm_host->pm_qos_irq.req.cpus_affine,
+			msm_host->pdata->pm_qos_data.irq_cpu);
 
 	INIT_DELAYED_WORK(&msm_host->pm_qos_irq.unvote_work,
 		sdhci_msm_pm_qos_irq_unvote_work);
@@ -3966,8 +3966,8 @@ static ssize_t sdhci_msm_pm_qos_group_show(struct device *dev,
 	for (i = 0; i < nr_groups; i++) {
 		group = &msm_host->pm_qos[i];
 		offset += snprintf(&buf[offset], PAGE_SIZE,
-			"Group #%d (mask=0x%lx) PM QoS: enabled=%d, counter=%d, latency=%d\n",
-			i, group->req.cpus_affine.bits[0],
+			"Group #%d (mask=0x%d) PM QoS: enabled=%d, counter=%d, latency=%d\n",
+			i, atomic_read(&group->req.cpus_affine),
 			msm_host->pm_qos_group_enable,
 			atomic_read(&group->counter),
 			group->latency);
@@ -4125,15 +4125,15 @@ void sdhci_msm_pm_qos_cpu_init(struct sdhci_host *host,
 			sdhci_msm_pm_qos_cpu_unvote_work);
 		atomic_set(&group->counter, 0);
 		group->req.type = PM_QOS_REQ_AFFINE_CORES;
-		cpumask_copy(&group->req.cpus_affine,
-			&msm_host->pdata->pm_qos_data.cpu_group_map.mask[i]);
+		atomic_set(&group->req.cpus_affine,
+			*cpumask_bits(&msm_host->pdata->pm_qos_data.cpu_group_map.mask[i]));
 		/* We set default latency here for all pm_qos cpu groups. */
 		group->latency = PM_QOS_DEFAULT_VALUE;
 		pm_qos_add_request(&group->req, PM_QOS_CPU_DMA_LATENCY,
 			group->latency);
-		pr_info("%s (): voted for group #%d (mask=0x%lx) latency=%d\n",
+		pr_info("%s (): voted for group #%d (mask=0x%d) latency=%d\n",
 			__func__, i,
-			group->req.cpus_affine.bits[0],
+			atomic_read(&group->req.cpus_affine),
 			group->latency);
 	}
 	msm_host->pm_qos_prev_cpu = -1;
@@ -4899,13 +4899,6 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		goto vreg_deinit;
 	}
 
-	/*
-	 * To avoid polling and to avoid this R1b command conversion
-	 * to R1 command if the requested busy timeout > host's max
-	 * busy timeout in case of sanitize, erase or any R1b command
-	 */
-	host->mmc->max_busy_timeout = 0;
-
 	msm_host->pltfm_init_done = true;
 
 	pm_runtime_set_active(&pdev->dev);
@@ -5074,7 +5067,7 @@ static int sdhci_msm_runtime_suspend(struct device *dev)
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = pltfm_host->priv;
-//	ktime_t start = ktime_get();
+	ktime_t start = ktime_get();
 	int ret;
 
 	if (host->mmc->card && mmc_card_sdio(host->mmc->card))
@@ -5101,8 +5094,8 @@ defer_disable_host_irq:
 			pr_err("%s: failed to suspend crypto engine %d\n",
 					mmc_hostname(host->mmc), ret);
 	}
-//	trace_sdhci_msm_runtime_suspend(mmc_hostname(host->mmc), 0,
-//			ktime_to_us(ktime_sub(ktime_get(), start)));
+	trace_sdhci_msm_runtime_suspend(mmc_hostname(host->mmc), 0,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
 	return 0;
 }
 
@@ -5111,7 +5104,7 @@ static int sdhci_msm_runtime_resume(struct device *dev)
 	struct sdhci_host *host = dev_get_drvdata(dev);
 	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
 	struct sdhci_msm_host *msm_host = pltfm_host->priv;
-//	ktime_t start = ktime_get();
+	ktime_t start = ktime_get();
 	int ret;
 
 	if (host->is_crypto_en) {
@@ -5135,8 +5128,8 @@ skip_ice_resume:
 defer_enable_host_irq:
 	enable_irq(msm_host->pwr_irq);
 
-//	trace_sdhci_msm_runtime_resume(mmc_hostname(host->mmc), 0,
-//			ktime_to_us(ktime_sub(ktime_get(), start)));
+	trace_sdhci_msm_runtime_resume(mmc_hostname(host->mmc), 0,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
 	return 0;
 }
 
@@ -5148,7 +5141,7 @@ static int sdhci_msm_suspend(struct device *dev)
 	struct mmc_host *mmc = host->mmc;
 	int ret = 0;
 	int sdio_cfg = 0;
-//	ktime_t start = ktime_get();
+	ktime_t start = ktime_get();
 
 	if (gpio_is_valid(msm_host->pdata->status_gpio) &&
 		(msm_host->mmc->slot.cd_irq >= 0))
@@ -5170,8 +5163,8 @@ out:
 			sdhci_cfg_irq(host, false, true);
 	}
 
-//	trace_sdhci_msm_suspend(mmc_hostname(host->mmc), ret,
-//			ktime_to_us(ktime_sub(ktime_get(), start)));
+	trace_sdhci_msm_suspend(mmc_hostname(host->mmc), ret,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
 	return ret;
 }
 
@@ -5182,7 +5175,7 @@ static int sdhci_msm_resume(struct device *dev)
 	struct sdhci_msm_host *msm_host = pltfm_host->priv;
 	int ret = 0;
 	int sdio_cfg = 0;
-//	ktime_t start = ktime_get();
+	ktime_t start = ktime_get();
 
 	if (gpio_is_valid(msm_host->pdata->status_gpio) &&
 		(msm_host->mmc->slot.cd_irq >= 0))
@@ -5202,8 +5195,8 @@ out:
 			sdhci_cfg_irq(host, true, true);
 	}
 
-//	trace_sdhci_msm_resume(mmc_hostname(host->mmc), ret,
-//			ktime_to_us(ktime_sub(ktime_get(), start)));
+	trace_sdhci_msm_resume(mmc_hostname(host->mmc), ret,
+			ktime_to_us(ktime_sub(ktime_get(), start)));
 	return ret;
 }
 

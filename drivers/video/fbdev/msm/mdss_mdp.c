@@ -105,7 +105,7 @@ static struct mdss_panel_intf pan_types[] = {
 	{"edp", MDSS_PANEL_INTF_EDP},
 	{"hdmi", MDSS_PANEL_INTF_HDMI},
 };
-#ifndef CONFIG_MACH_ASUS_X00T
+#ifndef CONFIG_MACH_ASUS_X00TD
 static
 #endif
 char mdss_mdp_panel[MDSS_MAX_PANEL_LEN];
@@ -731,7 +731,7 @@ int mdss_bus_scale_set_quota(int client, u64 ab_quota, u64 ib_quota)
 
 	mdss_res->ab[client] = ab_quota;
 	mdss_res->ib[client] = ib_quota;
-//	trace_mdp_perf_update_bus(client, ab_quota, ib_quota);
+	trace_mdp_perf_update_bus(client, ab_quota, ib_quota);
 
 	for (i = 0; i < MDSS_MAX_BUS_CLIENTS; i++) {
 		if (i == MDSS_MDP_NRT) {
@@ -5035,8 +5035,8 @@ void mdss_mdp_set_ot_limit(struct mdss_mdp_set_ot_params *params)
 	if (ot_lim == 0)
 		goto exit;
 
-//	trace_mdp_perf_set_ot(params->num, params->xin_id, ot_lim,
-//		is_vbif_nrt);
+	trace_mdp_perf_set_ot(params->num, params->xin_id, ot_lim,
+		is_vbif_nrt);
 
 	mutex_lock(&mdata->reg_lock);
 
@@ -5633,7 +5633,7 @@ static int __init mdss_mdp_driver_init(void)
 
 }
 
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 EXPORT_SYMBOL(mdss_mdp_panel);
 #endif
 

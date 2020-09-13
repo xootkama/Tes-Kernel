@@ -26,21 +26,28 @@
 #include "mdss_dsi.h"
 #include "mdss_dba_utils.h"
 #include "mdss_debug.h"
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 #include "mdss_panel.h"
 #endif
 
+#include <linux/display_state.h>
+
 #define DT_CMD_HDR 6
-#define MIN_REFRESH_RATE 48
 #define DEFAULT_MDP_TRANSFER_TIME 14000
 
 #define VSYNC_DELAY msecs_to_jiffies(17)
 
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 extern char mdss_mdp_panel[MDSS_MAX_PANEL_LEN];
 #endif
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
+
+bool display_on = true;
+bool is_display_on()
+{
+	return display_on;
+}
 
 void mdss_dsi_panel_pwm_cfg(struct mdss_dsi_ctrl_pdata *ctrl)
 {
@@ -189,7 +196,10 @@ static void mdss_dsi_panel_apply_settings(struct mdss_dsi_ctrl_pdata *ctrl,
 }
 
 
-static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
+#ifndef CONFIG_MACH_ASUS_X00TD
+static
+#endif
+void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 			struct dsi_panel_cmds *pcmds, u32 flags)
 {
 	struct dcs_cmd_req cmdreq;
@@ -380,7 +390,7 @@ ret:
 	return rc;
 }
 
-#if defined(CONFIG_MACH_ASUS_X00T) && defined(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_v27)
+#if defined(CONFIG_MACH_ASUS_X00TD) && defined(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_v27)
 extern long syna_gesture_mode;
 #endif
 int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
@@ -507,13 +517,13 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			gpio_set_value((ctrl_pdata->disp_en_gpio), 0);
 			gpio_free(ctrl_pdata->disp_en_gpio);
 		}
-#if defined(CONFIG_MACH_ASUS_X00T) && defined(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_v27)
+#if defined(CONFIG_MACH_ASUS_X00TD) && defined(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_v27)
 		if (strstr(mdss_mdp_panel,
 			"qcom,mdss_dsi_td4310_1080p_video_txd") &&
 			syna_gesture_mode == 0)
 #endif
 		gpio_set_value((ctrl_pdata->rst_gpio), 0);
-#if defined(CONFIG_MACH_ASUS_X00T) && defined(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_v27)
+#if defined(CONFIG_MACH_ASUS_X00TD) && defined(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_v27)
 		else
 			gpio_set_value((ctrl_pdata->rst_gpio), 1);
 #endif
@@ -947,6 +957,8 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		return -EINVAL;
 	}
 
+	display_on = true;
+
 	pinfo = &pdata->panel_info;
 	ctrl = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
@@ -1051,6 +1063,8 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 		mdss_dba_utils_video_off(pinfo->dba_data);
 		mdss_dba_utils_hdcp_enable(pinfo->dba_data, false);
 	}
+	
+	display_on = false;
 
 end:
 	pr_debug("%s:-\n", __func__);
@@ -2311,7 +2325,7 @@ static int mdss_dsi_set_refresh_rate_range(struct device_node *pan_node,
 		 * If min refresh rate is not specified, set it to the
 		 * default panel refresh rate.
 		 */
-		pinfo->min_fps = MIN_REFRESH_RATE;
+		pinfo->min_fps = pinfo->mipi.frame_rate;
 		rc = 0;
 	}
 
@@ -2957,6 +2971,11 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->off_cmds,
 		"qcom,mdss-dsi-off-command", "qcom,mdss-dsi-off-command-state");
+
+#ifdef CONFIG_MACH_ASUS_X00TD
+	mdss_dsi_parse_dcs_cmds(np, &ctrl_pdata->esd_recover_cmds,
+		"qcom,mdss-dsi-esd-recover-command", "qcom,mdss-dsi-esd-recover-command-state");
+#endif
 
 	rc = of_property_read_u32(np, "qcom,adjust-timer-wakeup-ms", &tmp);
 	pinfo->adjust_timer_delay_ms = (!rc ? tmp : 0);

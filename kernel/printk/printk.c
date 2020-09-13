@@ -472,7 +472,7 @@ static int log_store(int facility, int level,
 	if (ts_nsec > 0)
 		msg->ts_nsec = ts_nsec;
 	else
-		msg->ts_nsec = local_clock();
+		msg->ts_nsec = local_clock() + get_total_sleep_time_nsec();
 	memset(log_dict(msg) + dict_len, 0, pad_len);
 	msg->len = size;
 
@@ -659,10 +659,18 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 			endp++;
 			len -= endp - line;
 			line = endp;
+			/* QG-D */
+			if (line[0] == 'h') {
+				for (u = 0; u < 10; ++u) {
+					if (line[u] == 'd')
+						goto free;
+				}
+			}
 		}
 	}
 
 	printk_emit(facility, level, NULL, 0, "%s", line);
+free:
 	kfree(buf);
 	return ret;
 }
@@ -1059,6 +1067,7 @@ static size_t print_time(u64 ts, char *buf)
 	if (!printk_time)
 		return 0;
 
+	ts += get_total_sleep_time_nsec();
 	rem_nsec = do_div(ts, 1000000000);
 
 	if (!buf)
@@ -1628,7 +1637,7 @@ static bool cont_add(int facility, int level, const char *text, size_t len)
 		cont.facility = facility;
 		cont.level = level;
 		cont.owner = current;
-		cont.ts_nsec = local_clock();
+		cont.ts_nsec = local_clock() + get_total_sleep_time_nsec();
 		cont.flags = 0;
 		cont.cons = 0;
 		cont.flushed = false;
@@ -2904,8 +2913,10 @@ void kmsg_dump(enum kmsg_dump_reason reason)
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(dumper, &dump_list, list) {
+#ifndef CONFIG_MACH_ASUS_X00TD
 		if (dumper->max_reason && reason > dumper->max_reason)
 			continue;
+#endif
 
 		/* initialize iterator with data about the stored records */
 		dumper->active = true;

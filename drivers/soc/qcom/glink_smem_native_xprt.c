@@ -271,8 +271,6 @@ static void send_irq(struct edge_info *einfo)
 	einfo->readback = einfo->tx_ch_desc->write_index;
 	wmb();
 	writel_relaxed(einfo->out_irq_mask, einfo->out_irq_reg);
-	if (einfo->remote_proc_id != SMEM_SPSS)
-		writel_relaxed(0, einfo->out_irq_reg);
 	einfo->tx_irq_count++;
 }
 
@@ -449,10 +447,8 @@ static int fifo_read(struct edge_info *einfo, void *_data, int len)
 	uint32_t fifo_size = einfo->rx_fifo_size;
 	uint32_t n;
 
-	if (read_index >= fifo_size || write_index >= fifo_size) {
-		WARN_ON_ONCE(1);
-		return -EINVAL;
-	}
+	if (read_index >= fifo_size || write_index >= fifo_size)
+		return 0;
 
 	while (len) {
 		ptr = einfo->rx_fifo + read_index;
@@ -497,10 +493,8 @@ static uint32_t fifo_write_body(struct edge_info *einfo, const void *_data,
 	uint32_t fifo_size = einfo->tx_fifo_size;
 	uint32_t n;
 
-	if (read_index >= fifo_size || *write_index >= fifo_size) {
-		WARN_ON_ONCE(1);
-		return -EINVAL;
-	}
+	if (read_index >= fifo_size || *write_index >= fifo_size)
+		return 0;
 
 	while (len) {
 		ptr = einfo->tx_fifo + *write_index;
@@ -908,12 +902,6 @@ static void __rx_worker(struct edge_info *einfo, bool atomic_ctx)
 	if (einfo->in_ssr) {
 		srcu_read_unlock(&einfo->use_ref, rcu_id);
 		return;
-	}
-
-	if (!einfo->rx_fifo) {
-		if (!get_rx_fifo(einfo))
-			return;
-		einfo->xprt_if.glink_core_if_ptr->link_up(&einfo->xprt_if);
 	}
 
 	if ((atomic_ctx) && ((einfo->tx_resume_needed) ||
@@ -1512,10 +1500,10 @@ static void subsys_up(struct glink_transport_if *if_ptr)
 	struct edge_info *einfo;
 
 	einfo = container_of(if_ptr, struct edge_info, xprt_if);
-	einfo->in_ssr = false;
 	if (!einfo->rx_fifo) {
 		if (!get_rx_fifo(einfo))
 			return;
+		einfo->in_ssr = false;
 		einfo->xprt_if.glink_core_if_ptr->link_up(&einfo->xprt_if);
 	}
 }
@@ -2488,7 +2476,7 @@ static int glink_smem_native_probe(struct platform_device *pdev)
 	einfo->irq_line = irq_line;
 	einfo->in_ssr = true;
 	rc = request_irq(irq_line, irq_handler,
-			IRQF_TRIGGER_RISING | IRQF_SHARED,
+			IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND | IRQF_SHARED,
 			node->name, einfo);
 	if (rc < 0) {
 		pr_err("%s: request_irq on %d failed: %d\n", __func__, irq_line,

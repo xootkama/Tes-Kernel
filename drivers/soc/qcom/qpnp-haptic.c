@@ -2266,17 +2266,16 @@ static void qpnp_timed_enable_worker(struct work_struct *work)
 					 td_work);
 	bool state;
 	ktime_t rem;
-	int rc;
-	int time_ms;
+	int rc, time_ms;
 
 	spin_lock(&hap->td_lock);
 	time_ms = hap->td_time_ms;
 	spin_unlock(&hap->td_lock);
 
-	state = !!time_ms;
-
 	if (time_ms < 0)
 		return;
+
+	state = !!time_ms;
 
 	mutex_lock(&hap->lock);
 
@@ -3039,11 +3038,11 @@ static int qpnp_haptic_probe(struct platform_device *pdev)
 	hap = devm_kzalloc(&pdev->dev, sizeof(*hap), GFP_KERNEL);
 	if (!hap)
 		return -ENOMEM;
-		hap->regmap = dev_get_regmap(pdev->dev.parent, NULL);
-		if (!hap->regmap) {
-			pr_err("Couldn't get parent's regmap\n");
-			return -EINVAL;
-		}
+	hap->regmap = dev_get_regmap(pdev->dev.parent, NULL);
+	if (!hap->regmap) {
+		pr_err("Couldn't get parent's regmap\n");
+		return -EINVAL;
+	}
 
 	hap->pdev = pdev;
 

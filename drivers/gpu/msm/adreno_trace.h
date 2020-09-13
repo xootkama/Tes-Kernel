@@ -11,31 +11,6 @@
  *
  */
 
-#define trace_adreno_cmdbatch_fault(...) {}
-#define trace_adreno_cmdbatch_queued(...) {}
-#define trace_adreno_cmdbatch_recovery(...) {}
-#define trace_adreno_cmdbatch_retired(...) {}
-#define trace_adreno_cmdbatch_submitted(...) {}
-#define trace_adreno_cmdbatch_sync(...) {}
-#define trace_adreno_drawctxt_invalidate(...) {}
-#define trace_adreno_drawctxt_sleep(...) {}
-#define trace_adreno_drawctxt_switch(...) {}
-#define trace_adreno_drawctxt_wait_done(...) {}
-#define trace_adreno_drawctxt_wait_start(...) {}
-#define trace_adreno_drawctxt_wake(...) {}
-#define trace_adreno_gpu_fault(...) {}
-#define trace_adreno_hw_preempt_comp_to_clear(...) {}
-#define trace_adreno_hw_preempt_token_submit(...) {}
-#define trace_adreno_ifpc_count(...) {}
-#define trace_adreno_preempt_done(...) {}
-#define trace_adreno_preempt_trigger(...) {}
-#define trace_adreno_sp_tp(...) {}
-#define trace_dispatch_queue_context(...) {}
-#define trace_kgsl_a3xx_irq_status(...) {}
-#define trace_kgsl_a4xx_irq_status(...) {}
-#define trace_kgsl_a5xx_irq_status(...) {}
-
-#if 0
 #if !defined(_ADRENO_TRACE_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _ADRENO_TRACE_H
 
@@ -396,7 +371,7 @@ TRACE_EVENT(adreno_sp_tp,
 /*
  * Tracepoint for a3xx irq. Includes status info
  */
-/* TRACE_EVENT(kgsl_a3xx_irq_status,
+TRACE_EVENT(kgsl_a3xx_irq_status,
 
 	TP_PROTO(struct adreno_device *adreno_dev, unsigned int status),
 
@@ -418,12 +393,12 @@ TRACE_EVENT(adreno_sp_tp,
 		__entry->status ? __print_flags(__entry->status, "|",
 			A3XX_IRQ_FLAGS) : "None"
 	)
-); */
+);
 
 /*
  * Tracepoint for a4xx irq. Includes status info
  */
-/* TRACE_EVENT(kgsl_a4xx_irq_status,
+TRACE_EVENT(kgsl_a4xx_irq_status,
 
 	TP_PROTO(struct adreno_device *adreno_dev, unsigned int status),
 
@@ -445,12 +420,12 @@ TRACE_EVENT(adreno_sp_tp,
 		__entry->status ? __print_flags(__entry->status, "|",
 			A4XX_IRQ_FLAGS) : "None"
 	)
-); */
+);
 
 /*
  * Tracepoint for a5xx irq. Includes status info
  */
-/* TRACE_EVENT(kgsl_a5xx_irq_status,
+TRACE_EVENT(kgsl_a5xx_irq_status,
 
 	TP_PROTO(struct adreno_device *adreno_dev, unsigned int status),
 
@@ -472,7 +447,7 @@ TRACE_EVENT(adreno_sp_tp,
 		__entry->status ? __print_flags(__entry->status, "|",
 			A5XX_IRQ_FLAGS) : "None"
 	)
-); */
+);
 
 DECLARE_EVENT_CLASS(adreno_hw_preempt_template,
 	TP_PROTO(struct adreno_ringbuffer *cur_rb,
@@ -631,4 +606,3 @@ TRACE_EVENT(adreno_preempt_done,
 
 /* This part must be outside protection */
 #include <trace/define_trace.h>
-#endif

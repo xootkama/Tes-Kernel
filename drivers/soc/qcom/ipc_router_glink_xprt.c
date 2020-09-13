@@ -10,6 +10,11 @@
  * GNU General Public License for more details.
  */
 
+/*
+ * IPC ROUTER GLINK XPRT module.
+ */
+#define DEBUG
+
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/types.h>
@@ -18,12 +23,11 @@
 #include <linux/skbuff.h>
 #include <linux/delay.h>
 #include <linux/sched.h>
-#include <linux/kthread.h>
 
 #include <soc/qcom/glink.h>
 #include <soc/qcom/subsystem_restart.h>
 
-static int ipc_router_glink_xprt_debug_mask = 0;
+static int ipc_router_glink_xprt_debug_mask;
 module_param_named(debug_mask, ipc_router_glink_xprt_debug_mask,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
 
@@ -70,7 +74,6 @@ if (ipc_router_glink_xprt_debug_mask) \
  * @xprt_option: XPRT specific options to be handled by IPC Router.
  * @disable_pil_loading: Disable PIL Loading of the subsystem.
  * @dynamic_wakeup_source: Dynamic wakeup source for this subsystem.
- * @low_latency_xprt: Flag to indicate low latency transport.
  */
 struct ipc_router_glink_xprt {
 	struct list_head list;
@@ -82,6 +85,7 @@ struct ipc_router_glink_xprt {
 	char notify_rx_ws_name[IPC_RTR_WS_NAME_LEN];
 	struct msm_ipc_router_xprt xprt;
 	void *ch_hndl;
+	struct workqueue_struct *xprt_wq;
 	struct wakeup_source notify_rxv_ws;
 	struct rw_semaphore ss_reset_rwlock;
 	int ss_reset;
@@ -94,21 +98,17 @@ struct ipc_router_glink_xprt {
 	uint32_t cur_md_intents_cnt;
 	uint32_t cur_hi_intents_cnt;
 	bool dynamic_wakeup_source;
-	bool low_latency_xprt;
-
-	struct kthread_worker kworker;
-	struct task_struct *task;
 };
 
 struct ipc_router_glink_xprt_work {
 	struct ipc_router_glink_xprt *glink_xprtp;
-	struct kthread_work kwork;
+	struct work_struct work;
 };
 
 struct queue_rx_intent_work {
 	struct ipc_router_glink_xprt *glink_xprtp;
 	size_t intent_size;
-	struct kthread_work kwork;
+	struct work_struct work;
 };
 
 struct read_work {
@@ -117,14 +117,12 @@ struct read_work {
 	size_t iovec_size;
 	void * (*vbuf_provider)(void *iovec, size_t offset, size_t *size);
 	void * (*pbuf_provider)(void *iovec, size_t offset, size_t *size);
-	struct kthread_work kwork;
+	struct work_struct work;
 };
 
-static struct kmem_cache *kmem_read_work_pool;
-
-static void glink_xprt_read_data(struct kthread_work *work);
-static void glink_xprt_open_event(struct kthread_work *work);
-static void glink_xprt_close_event(struct kthread_work *work);
+static void glink_xprt_read_data(struct work_struct *work);
+static void glink_xprt_open_event(struct work_struct *work);
+static void glink_xprt_close_event(struct work_struct *work);
 
 /**
  * ipc_router_glink_xprt_config - Config. Info. of each GLINK XPRT
@@ -137,7 +135,6 @@ static void glink_xprt_close_event(struct kthread_work *work);
  * @xprt_version:	IPC Router header version supported by this XPRT.
  * @disable_pil_loading:Disable PIL Loading of the subsystem.
  * @dynamic_wakeup_source: Dynamic wakeup source for this subsystem.
- * @low_latency_xprt: Flag to indicate low latency transport.
  */
 struct ipc_router_glink_xprt_config {
 	char ch_name[GLINK_NAME_SIZE];
@@ -150,7 +147,6 @@ struct ipc_router_glink_xprt_config {
 	unsigned xprt_option;
 	bool disable_pil_loading;
 	bool dynamic_wakeup_source;
-	bool low_latency_xprt;
 };
 
 #define MODULE_NAME "ipc_router_glink_xprt"
@@ -313,14 +309,6 @@ static bool ipc_router_glink_xprt_get_ws_info(struct msm_ipc_router_xprt *xprt)
 	return glink_xprtp->dynamic_wakeup_source;
 }
 
-static bool ipc_router_glink_xprt_latency_info(struct msm_ipc_router_xprt *xprt)
-{
-	struct ipc_router_glink_xprt *glink_xprtp =
-		container_of(xprt, struct ipc_router_glink_xprt, xprt);
-
-	return glink_xprtp->low_latency_xprt;
-}
-
 static struct rr_packet *glink_xprt_copy_data(struct read_work *rx_work)
 {
 	void *buf, *pbuf, *dest_buf;
@@ -362,11 +350,11 @@ static struct rr_packet *glink_xprt_copy_data(struct read_work *rx_work)
 	return pkt;
 }
 
-static void glink_xprt_read_data(struct kthread_work *work)
+static void glink_xprt_read_data(struct work_struct *work)
 {
 	struct rr_packet *pkt;
 	struct read_work *rx_work =
-		container_of(work, struct read_work, kwork);
+		container_of(work, struct read_work, work);
 	struct ipc_router_glink_xprt *glink_xprtp = rx_work->glink_xprtp;
 	bool reuse_intent = false;
 
@@ -392,15 +380,15 @@ static void glink_xprt_read_data(struct kthread_work *work)
 	release_pkt(pkt);
 out_read_data:
 	glink_rx_done(glink_xprtp->ch_hndl, rx_work->iovec, reuse_intent);
-	kmem_cache_free(kmem_read_work_pool, rx_work);
+	kfree(rx_work);
 	up_read(&glink_xprtp->ss_reset_rwlock);
 	__pm_relax(&glink_xprtp->notify_rxv_ws);
 }
 
-static void glink_xprt_open_event(struct kthread_work *work)
+static void glink_xprt_open_event(struct work_struct *work)
 {
 	struct ipc_router_glink_xprt_work *xprt_work =
-		container_of(work, struct ipc_router_glink_xprt_work, kwork);
+		container_of(work, struct ipc_router_glink_xprt_work, work);
 	struct ipc_router_glink_xprt *glink_xprtp = xprt_work->glink_xprtp;
 	int i;
 
@@ -419,10 +407,10 @@ static void glink_xprt_open_event(struct kthread_work *work)
 	kfree(xprt_work);
 }
 
-static void glink_xprt_close_event(struct kthread_work *work)
+static void glink_xprt_close_event(struct work_struct *work)
 {
 	struct ipc_router_glink_xprt_work *xprt_work =
-		container_of(work, struct ipc_router_glink_xprt_work, kwork);
+		container_of(work, struct ipc_router_glink_xprt_work, work);
 	struct ipc_router_glink_xprt *glink_xprtp = xprt_work->glink_xprtp;
 
 	init_completion(&glink_xprtp->sft_close_complete);
@@ -434,11 +422,11 @@ static void glink_xprt_close_event(struct kthread_work *work)
 	kfree(xprt_work);
 }
 
-static void glink_xprt_qrx_intent_worker(struct kthread_work *work)
+static void glink_xprt_qrx_intent_worker(struct work_struct *work)
 {
 	size_t sz;
 	struct queue_rx_intent_work *qrx_intent_work =
-		container_of(work, struct queue_rx_intent_work, kwork);
+		container_of(work, struct queue_rx_intent_work, work);
 	struct ipc_router_glink_xprt *glink_xprtp =
 					qrx_intent_work->glink_xprtp;
 	uint32_t *cnt = NULL;
@@ -497,7 +485,7 @@ static void glink_xprt_notify_rxv(void *handle, const void *priv,
 		(struct ipc_router_glink_xprt *)priv;
 	struct read_work *rx_work;
 
-	rx_work = kmem_cache_alloc(kmem_read_work_pool, GFP_ATOMIC);
+	rx_work = kmalloc(sizeof(*rx_work), GFP_ATOMIC);
 	if (!rx_work) {
 		IPC_RTR_ERR("%s: couldn't allocate read_work\n", __func__);
 		glink_rx_done(glink_xprtp->ch_hndl, ptr, true);
@@ -511,13 +499,15 @@ static void glink_xprt_notify_rxv(void *handle, const void *priv,
 	rx_work->pbuf_provider = pbuf_provider;
 	if (!glink_xprtp->dynamic_wakeup_source)
 		__pm_stay_awake(&glink_xprtp->notify_rxv_ws);
-	init_kthread_work(&rx_work->kwork, glink_xprt_read_data);
-	queue_kthread_work(&glink_xprtp->kworker, &rx_work->kwork);
+	INIT_WORK(&rx_work->work, glink_xprt_read_data);
+	queue_work(glink_xprtp->xprt_wq, &rx_work->work);
 }
 
 static void glink_xprt_notify_tx_done(void *handle, const void *priv,
 				      const void *pkt_priv, const void *ptr)
 {
+	struct ipc_router_glink_xprt *glink_xprtp =
+		(struct ipc_router_glink_xprt *)priv;
 	struct rr_packet *temp_pkt = (struct rr_packet *)ptr;
 
 	D("%s:%s: @ %p\n", __func__, glink_xprtp->ipc_rtr_xprt_name, ptr);
@@ -543,9 +533,8 @@ static bool glink_xprt_notify_rx_intent_req(void *handle, const void *priv,
 	}
 	qrx_intent_work->glink_xprtp = glink_xprtp;
 	qrx_intent_work->intent_size = sz;
-	init_kthread_work(&qrx_intent_work->kwork,
-			  glink_xprt_qrx_intent_worker);
-	queue_kthread_work(&glink_xprtp->kworker, &qrx_intent_work->kwork);
+	INIT_WORK(&qrx_intent_work->work, glink_xprt_qrx_intent_worker);
+	queue_work(glink_xprtp->xprt_wq, &qrx_intent_work->work);
 	return true;
 }
 
@@ -574,8 +563,8 @@ static void glink_xprt_notify_state(void *handle, const void *priv,
 			return;
 		}
 		xprt_work->glink_xprtp = glink_xprtp;
-		init_kthread_work(&xprt_work->kwork, glink_xprt_open_event);
-		queue_kthread_work(&glink_xprtp->kworker, &xprt_work->kwork);
+		INIT_WORK(&xprt_work->work, glink_xprt_open_event);
+		queue_work(glink_xprtp->xprt_wq, &xprt_work->work);
 		break;
 
 	case GLINK_LOCAL_DISCONNECTED:
@@ -596,8 +585,8 @@ static void glink_xprt_notify_state(void *handle, const void *priv,
 			return;
 		}
 		xprt_work->glink_xprtp = glink_xprtp;
-		init_kthread_work(&xprt_work->kwork, glink_xprt_close_event);
-		queue_kthread_work(&glink_xprtp->kworker, &xprt_work->kwork);
+		INIT_WORK(&xprt_work->work, glink_xprt_close_event);
+		queue_work(glink_xprtp->xprt_wq, &xprt_work->work);
 		break;
 	}
 }
@@ -722,7 +711,6 @@ static int ipc_router_glink_config_init(
 {
 	struct ipc_router_glink_xprt *glink_xprtp;
 	char xprt_wq_name[GLINK_NAME_SIZE];
-	struct sched_param param = {.sched_priority = 1};
 
 	glink_xprtp = kzalloc(sizeof(struct ipc_router_glink_xprt), GFP_KERNEL);
 	if (IS_ERR_OR_NULL(glink_xprtp)) {
@@ -740,8 +728,6 @@ static int ipc_router_glink_config_init(
 				glink_xprt_config->disable_pil_loading;
 	glink_xprtp->dynamic_wakeup_source =
 				glink_xprt_config->dynamic_wakeup_source;
-	glink_xprtp->low_latency_xprt =
-				glink_xprt_config->low_latency_xprt;
 
 	if (!glink_xprtp->disable_pil_loading)
 		strlcpy(glink_xprtp->pil_edge, glink_xprt_config->pil_edge,
@@ -765,7 +751,6 @@ static int ipc_router_glink_config_init(
 	glink_xprtp->xprt.close = ipc_router_glink_xprt_close;
 	glink_xprtp->xprt.sft_close_done = glink_xprt_sft_close_done;
 	glink_xprtp->xprt.get_ws_info = ipc_router_glink_xprt_get_ws_info;
-	glink_xprtp->xprt.get_latency_info = ipc_router_glink_xprt_latency_info;
 	glink_xprtp->xprt.priv = NULL;
 
 	init_rwsem(&glink_xprtp->ss_reset_rwlock);
@@ -774,20 +759,15 @@ static int ipc_router_glink_config_init(
 	scnprintf(xprt_wq_name, GLINK_NAME_SIZE, "%s_%s_%s",
 			glink_xprtp->ch_name, glink_xprtp->edge,
 			glink_xprtp->transport);
-	init_kthread_worker(&glink_xprtp->kworker);
-	glink_xprtp->task = kthread_run(kthread_worker_fn,
-					&glink_xprtp->kworker,
-					"%s", xprt_wq_name);
-	if (IS_ERR(glink_xprtp->task)) {
-		IPC_RTR_ERR("%s:%s task alloc failed\n",
-			    __func__, xprt_wq_name);
+	glink_xprtp->xprt_wq = create_singlethread_workqueue(xprt_wq_name);
+	if (IS_ERR_OR_NULL(glink_xprtp->xprt_wq)) {
+		IPC_RTR_ERR("%s:%s:%s:%s wq alloc failed\n",
+			    __func__, glink_xprt_config->ch_name,
+			    glink_xprt_config->edge,
+			    glink_xprt_config->transport);
 		kfree(glink_xprtp);
 		return -EFAULT;
 	}
-
-	if (glink_xprtp->low_latency_xprt)
-		sched_setscheduler(glink_xprtp->task, SCHED_FIFO, &param);
-
 	scnprintf(glink_xprtp->notify_rx_ws_name, IPC_RTR_WS_NAME_LEN,
 			"%s_%s_rx", glink_xprtp->ch_name, glink_xprtp->edge);
 	wakeup_source_init(&glink_xprtp->notify_rxv_ws,
@@ -872,9 +852,6 @@ static int parse_devicetree(struct device_node *node,
 	glink_xprt_config->dynamic_wakeup_source =
 					of_property_read_bool(node, key);
 
-	key = "qcom,low-latency-xprt";
-	glink_xprt_config->low_latency_xprt =
-					of_property_read_bool(node, key);
 	return 0;
 
 error:
@@ -934,8 +911,6 @@ static struct platform_driver ipc_router_glink_xprt_driver = {
 static int __init ipc_router_glink_xprt_init(void)
 {
 	int rc;
-
-	kmem_read_work_pool = KMEM_CACHE(read_work, SLAB_HWCACHE_ALIGN | SLAB_PANIC);
 
 	glink_xprt_wq = create_singlethread_workqueue("glink_xprt_wq");
 	if (IS_ERR_OR_NULL(glink_xprt_wq)) {

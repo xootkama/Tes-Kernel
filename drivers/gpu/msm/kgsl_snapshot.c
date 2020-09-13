@@ -851,7 +851,7 @@ static ssize_t snapshot_crashdumper_store(struct kgsl_device *device,
 	int ret;
 
 	if (device && count > 0)
-		device->snapshot_crashdumper = 0;
+		device->snapshot_crashdumper = 1;
 
 	ret = kgsl_sysfs_store(buf, &val);
 
@@ -969,7 +969,7 @@ int kgsl_device_snapshot_init(struct kgsl_device *device)
 	device->snapshot = NULL;
 	device->snapshot_faultcount = 0;
 	device->force_panic = 0;
-	device->snapshot_crashdumper = 0;
+	device->snapshot_crashdumper = 1;
 
 	ret = kobject_init_and_add(&device->snapshot_kobj, &ktype_snapshot,
 		&device->dev->kobj, "snapshot");

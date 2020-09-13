@@ -15,16 +15,15 @@
 #include <linux/module.h>
 #include <linux/mfd/msm-cdc-pinctrl.h>
 #include <sound/pcm_params.h>
+#ifdef CONFIG_MACH_ASUS_X00TD
+#include <linux/delay.h>
+#endif
 #include "qdsp6v2/msm-pcm-routing-v2.h"
 #include "sdm660-common.h"
 #include "../codecs/sdm660_cdc/msm-digital-cdc.h"
 #include "../codecs/sdm660_cdc/msm-analog-cdc.h"
 #include "../codecs/msm_sdw/msm_sdw.h"
 #include <linux/pm_qos.h>
-
-#ifdef CONFIG_MACH_ASUS_X00T
-#include <linux/delay.h>
-#endif
 
 #define __CHIPSET__ "SDM660 "
 #define MSM_DAILINK_NAME(name) (__CHIPSET__#name)
@@ -488,72 +487,19 @@ done:
 	return ret;
 }
 
-#ifdef CONFIG_MACH_ASUS_X00T
-/* Huaqin add for solve headphone can not recognize by xudayi at 2018/02/12 start */
+#ifdef CONFIG_MACH_ASUS_X00TD
 extern int hph_ext_en_gpio;
 extern int hph_ext_sw_gpio;
-/* Huaqin add for solve headphone can not recognize by xudayi at 2018/02/12 end */
 
-/* Huaqin add for ZQL1650-155 by xudayi at 2018/02/02 start */
 static int is_ext_hph_gpio_support(struct platform_device *pdev,
 				   struct msm_asoc_mach_data *pdata)
 {
-	/* Huaqin add for delete on new audioboard by xudayi at 2018/03/03 start */
-	#if 0
-	const char *hph_ext_switch = "qcom,msm-hph-ext-sw";
-
-	pdata->hph_ext_en_gpio= of_get_named_gpio(pdev->dev.of_node,
-				hph_ext_switch, 0);
-
-	pdata->hph_ext_sw_gpio= of_get_named_gpio(pdev->dev.of_node,
-				hph_ext_switch, 1);
-	pr_err("%s:Enter %d,%d\n", __func__,pdata->hph_ext_en_gpio,pdata->hph_ext_sw_gpio);
-
-	if (pdata->hph_ext_en_gpio < 0 || pdata->hph_ext_sw_gpio < 0) {
-		dev_err(&pdev->dev,
-			"%s: missing %s in dt node\n", __func__, hph_ext_switch);
-	}else{
-		if (!gpio_is_valid(pdata->hph_ext_en_gpio) || !gpio_is_valid(pdata->hph_ext_sw_gpio)) {
-			pr_err("%s: Invalid external headphone gpio: %d,%d",
-				__func__, pdata->hph_ext_en_gpio,pdata->hph_ext_sw_gpio);
-			return -EINVAL;
-		}
-		/* Huaqin add for solve headphone can not recognize by xudayi at 2018/02/12 start */
-		hph_ext_en_gpio = pdata->hph_ext_en_gpio;
-		hph_ext_sw_gpio = pdata->hph_ext_sw_gpio;
-		/* Huaqin add for solve headphone can not recognize by xudayi at 2018/02/12 end */
-	}
-	#endif
-	/* Huaqin add for delete on new audioboard by xudayi at 2018/03/03 end */
 	return 0;
 }
 
+
 static int enable_hph_ext_sw(struct snd_soc_codec *codec, int enable)
 {
-	#if 0
-	struct snd_soc_card *card = codec->component.card;
-	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
-
-	pr_err("%s: %s external headphone switch\n", __func__,
-			enable ? "Enable" : "Disable");
-
-	if (!gpio_is_valid(pdata->hph_ext_en_gpio) || !gpio_is_valid(pdata->hph_ext_sw_gpio)) {
-		pr_err("%s: Invalid gpio: %d,%d\n", __func__,
-			pdata->hph_ext_en_gpio,pdata->hph_ext_en_gpio);
-		return false;
-	}
-
-	if (enable) {
-		gpio_direction_output(pdata->hph_ext_en_gpio, 1);
-		udelay(10);
-		gpio_direction_output(pdata->hph_ext_sw_gpio, 1);
-	} else {
-		gpio_direction_output(pdata->hph_ext_sw_gpio, 0);
-		udelay(10);
-		gpio_direction_output(pdata->hph_ext_en_gpio, 0);
-	}
-	#endif
-
 	return 0;
 }
 #endif
@@ -561,7 +507,7 @@ static int enable_hph_ext_sw(struct snd_soc_codec *codec, int enable)
 static int is_ext_spk_gpio_support(struct platform_device *pdev,
 				   struct msm_asoc_mach_data *pdata)
 {
-#ifndef CONFIG_MACH_ASUS_X00T
+#ifndef CONFIG_MACH_ASUS_X00TD
 	const char *spk_ext_pa = "qcom,msm-spk-ext-pa";
 
 	pr_debug("%s:Enter\n", __func__);
@@ -580,12 +526,13 @@ static int is_ext_spk_gpio_support(struct platform_device *pdev,
 		}
 	}
 #endif
+
 	return 0;
 }
 
 static int enable_spk_ext_pa(struct snd_soc_codec *codec, int enable)
 {
-#ifndef CONFIG_MACH_ASUS_X00T
+#ifndef CONFIG_MACH_ASUS_X00TD
 	struct snd_soc_card *card = codec->component.card;
 	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 	int ret;
@@ -618,7 +565,8 @@ static int enable_spk_ext_pa(struct snd_soc_codec *codec, int enable)
 			return ret;
 		}
 	}
-#endif
+#endif /* !CONFIG_MACH_ASUS_X00TD */
+
 	return 0;
 }
 
@@ -1387,7 +1335,7 @@ static void *def_msm_int_wcd_mbhc_cal(void)
 		return NULL;
 
 #define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(msm_int_wcd_cal)->X) = (Y))
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 	S(v_hs_max, 1700);
 #else
 	S(v_hs_max, 1500);
@@ -1416,7 +1364,7 @@ static void *def_msm_int_wcd_mbhc_cal(void)
 	 */
 	btn_low[0] = 75;
 	btn_high[0] = 75;
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 	btn_low[1] = 225;
 	btn_high[1] = 225;
 	btn_low[2] = 450;
@@ -1490,7 +1438,7 @@ static int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_sync(dapm);
 
 	msm_anlg_cdc_spk_ext_pa_cb(enable_spk_ext_pa, ana_cdc);
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 	msm_anlg_cdc_hph_ext_sw_cb(enable_hph_ext_sw, ana_cdc);
 #endif
 	msm_dig_cdc_hph_comp_cb(msm_config_hph_compander_gpio, dig_cdc);
@@ -1814,15 +1762,10 @@ static struct snd_soc_ops msm_sdw_mi2s_be_ops = {
 
 static int msm_fe_qos_prepare(struct snd_pcm_substream *substream)
 {
-	cpumask_t mask;
-
 	if (pm_qos_request_active(&substream->latency_pm_qos_req))
 		pm_qos_remove_request(&substream->latency_pm_qos_req);
 
-	cpumask_clear(&mask);
-	cpumask_set_cpu(1, &mask); /* affine to core 1 */
-	cpumask_set_cpu(2, &mask); /* affine to core 2 */
-	cpumask_copy(&substream->latency_pm_qos_req.cpus_affine, &mask);
+	atomic_set(&substream->latency_pm_qos_req.cpus_affine, BIT(1) | BIT(2));
 	substream->latency_pm_qos_req.type = PM_QOS_REQ_AFFINE_CORES;
 
 	pm_qos_add_request(&substream->latency_pm_qos_req,
@@ -2523,7 +2466,7 @@ static struct snd_soc_dai_link msm_int_dai[] = {
 		.ignore_pmdown_time = 1,
 		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA6,
 	},
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 	{/* hw:x,40 */
 		.name = "Tertiary MI2S_TX Hostless",
 		.stream_name = "Tertiary MI2S_TX Hostless",
@@ -2544,16 +2487,6 @@ static struct snd_soc_dai_link msm_int_dai[] = {
 #endif
 };
 
-#ifdef CONFIG_MACH_ASUS_X00T
-static struct snd_soc_dai_link_component tfa98xx_codecs[] ={
-	{
-		.name     = "tfa98xx.6-0034",
-		.of_node  = NULL,
-		.dai_name = "tfa98xx-aif-6-34",
-	},
-
-};
-#endif
 
 static struct snd_soc_dai_link msm_int_wsa_dai[] = {
 	{/* hw:x,40 */
@@ -2572,6 +2505,17 @@ static struct snd_soc_dai_link msm_int_wsa_dai[] = {
 		.ignore_pmdown_time = 1,
 	},
 };
+
+#ifdef CONFIG_MACH_ASUS_X00TD
+static struct snd_soc_dai_link_component tfa98xx_codecs[] = {
+	{
+		.name     = "tfa98xx.6-0034",
+		.of_node  = NULL,
+		.dai_name = "tfa98xx-aif-6-34",
+	},
+
+};
+#endif
 
 static struct snd_soc_dai_link msm_int_be_dai[] = {
 	/* Backend I2S DAI Links */
@@ -2908,44 +2852,18 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.ops = &msm_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
-#ifdef CONFIG_MACH_ASUS_X00T
 	{
 		.name = LPASS_BE_TERT_MI2S_RX,
 		.stream_name = "Tertiary MI2S Playback",
 		.cpu_dai_name = "msm-dai-q6-mi2s.2",
 		.platform_name = "msm-pcm-routing",
+#ifdef CONFIG_MACH_ASUS_X00TD
 		.codecs = tfa98xx_codecs,
 		.num_codecs = 1,
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.be_id = MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
-		.be_hw_params_fixup = msm_common_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-		.ignore_pmdown_time = 1,
-	},
-	{
-		.name = LPASS_BE_TERT_MI2S_TX,
-		.stream_name = "Tertiary MI2S Capture",
-		.cpu_dai_name = "msm-dai-q6-mi2s.2",
-		.platform_name = "msm-pcm-routing",
-		.codecs = tfa98xx_codecs,
-		.num_codecs = 1,
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.be_id = MSM_BACKEND_DAI_TERTIARY_MI2S_TX,
-		.be_hw_params_fixup = msm_common_be_hw_params_fixup,
-		.ops = &msm_mi2s_be_ops,
-		.ignore_suspend = 1,
-	},
 #else
-	{
-		.name = LPASS_BE_TERT_MI2S_RX,
-		.stream_name = "Tertiary MI2S Playback",
-		.cpu_dai_name = "msm-dai-q6-mi2s.2",
-		.platform_name = "msm-pcm-routing",
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-rx",
+#endif
 		.no_pcm = 1,
 		.dpcm_playback = 1,
 		.be_id = MSM_BACKEND_DAI_TERTIARY_MI2S_RX,
@@ -2959,8 +2877,13 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.stream_name = "Tertiary MI2S Capture",
 		.cpu_dai_name = "msm-dai-q6-mi2s.2",
 		.platform_name = "msm-pcm-routing",
+#ifdef CONFIG_MACH_ASUS_X00TD
+		.codecs = tfa98xx_codecs,
+		.num_codecs = 1,
+#else
 		.codec_name = "msm-stub-codec.1",
 		.codec_dai_name = "msm-stub-tx",
+#endif
 		.no_pcm = 1,
 		.dpcm_capture = 1,
 		.be_id = MSM_BACKEND_DAI_TERTIARY_MI2S_TX,
@@ -2968,7 +2891,6 @@ static struct snd_soc_dai_link msm_mi2s_be_dai_links[] = {
 		.ops = &msm_mi2s_be_ops,
 		.ignore_suspend = 1,
 	},
-#endif
 	{
 		.name = LPASS_BE_QUAT_MI2S_RX,
 		.stream_name = "Quaternary MI2S Playback",
@@ -3354,13 +3276,15 @@ static int msm_internal_init(struct platform_device *pdev,
 		dev_dbg(&pdev->dev,
 			"%s: doesn't support external speaker pa\n",
 			__func__);
-#ifdef CONFIG_MACH_ASUS_X00T
+
+#ifdef CONFIG_MACH_ASUS_X00TD
 	ret = is_ext_hph_gpio_support(pdev, pdata);
 	if (ret < 0)
 		dev_dbg(&pdev->dev,
 			"%s: doesn't support external headphone switch\n",
 			__func__);
 #endif
+
 	ret = of_property_read_string(pdev->dev.of_node,
 				      hs_micbias_type, &type);
 	if (ret) {

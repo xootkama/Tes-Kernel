@@ -90,6 +90,8 @@ source "drivers/mfd/Kconfig"
 
 source "drivers/regulator/Kconfig"
 
+source "drivers/sensors/Kconfig"
+
 source "drivers/media/Kconfig"
 
 source "drivers/video/Kconfig"
@@ -209,8 +211,6 @@ source "drivers/fpga/Kconfig"
 source "drivers/firmware/Kconfig"
 
 source "drivers/bif/Kconfig"
-
-source "drivers/sensors/Kconfig"
 
 source "drivers/tee/Kconfig"
 

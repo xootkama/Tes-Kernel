@@ -54,7 +54,7 @@ int __ipa_generate_rt_hw_rule_v2(enum ipa_ip_type ip,
 	struct ipa_hdr_entry *hdr_entry;
 
 	if (buf == NULL) {
-		memset(tmp, 0, (IPA_RT_FLT_HW_RULE_BUF_SIZE/4));
+		memset(tmp, 0, (IPA_RT_FLT_HW_RULE_BUF_SIZE/4) * sizeof(uint32_t));
 		buf = (u8 *)tmp;
 	}
 
@@ -1062,7 +1062,7 @@ static int __ipa_add_rt_rule(enum ipa_ip_type ip, const char *name,
 		goto error;
 	}
 	/*
-	 * do not allow any rules to be added at end of the "default" routing
+	 * do not allow any rule to be added at "default" routing
 	 * tables
 	 */
 	if (!strncmp(tbl->name, IPA_DFLT_RT_TBL_NAME, IPA_RESOURCE_NAME_MAX) &&

@@ -67,21 +67,23 @@ enum wcd_mbhc_cs_mb_en_flag {
 	WCD_MBHC_EN_NONE,
 };
 
-#ifdef CONFIG_MACH_ASUS_X00T
-static int hph_state = 0;
+#ifdef CONFIG_MACH_ASUS_X00TD
+static int hph_state;
+
 static bool wcd_swch_level_remove(struct wcd_mbhc *mbhc);
 #endif
 
 static void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 				struct snd_soc_jack *jack, int status, int mask)
 {
-#ifdef CONFIG_MACH_ASUS_X00T
-	pr_err("%s:%x,%x",__func__,status,mask);
-	if((status == 0x9 && mask == 0x3cf) || (status == 0xb && mask == 0x3cf))
+#ifdef CONFIG_MACH_ASUS_X00TD
+	if ((status == 0x9 && mask == 0x3cf) ||
+		(status == 0xb && mask == 0x3cf))
 		hph_state = 1;
 	else
 		hph_state = 0;
 #endif
+
 	snd_soc_jack_report(jack, status, mask);
 }
 
@@ -370,8 +372,8 @@ out_micb_en:
 			/* Disable cs, pullup & enable micbias */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
 		else
-#ifdef CONFIG_MACH_ASUS_X00T
-		     if(!wcd_swch_level_remove(mbhc))
+#ifdef CONFIG_MACH_ASUS_X00TD
+		if (!wcd_swch_level_remove(mbhc))
 #endif
 			/* Disable micbias, pullup & enable cs */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_CS);
@@ -391,8 +393,8 @@ out_micb_en:
 			/* Disable cs, pullup & enable micbias */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
 		else
-#ifdef CONFIG_MACH_ASUS_X00T
-		     if(!wcd_swch_level_remove(mbhc))
+#ifdef CONFIG_MACH_ASUS_X00TD
+		if (!wcd_swch_level_remove(mbhc))
 #endif
 			/* Disable micbias, pullup & enable cs */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_CS);
@@ -406,8 +408,8 @@ out_micb_en:
 			/* Disable cs, pullup & enable micbias */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
 		else
-#ifdef CONFIG_MACH_ASUS_X00T
-		     if(!wcd_swch_level_remove(mbhc))
+#ifdef CONFIG_MACH_ASUS_X00TD
+		if (!wcd_swch_level_remove(mbhc))
 #endif
 			/* Disable micbias, enable pullup & cs */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_PULLUP);
@@ -419,8 +421,8 @@ out_micb_en:
 			/* Disable cs, pullup & enable micbias */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
 		else
-#ifdef CONFIG_MACH_ASUS_X00T
-		     if(!wcd_swch_level_remove(mbhc))
+#ifdef CONFIG_MACH_ASUS_X00TD
+		if (!wcd_swch_level_remove(mbhc))
 #endif
 			/* Disable micbias, enable pullup & cs */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_PULLUP);
@@ -911,7 +913,7 @@ static void wcd_mbhc_find_plug_and_report(struct wcd_mbhc *mbhc,
 						SND_JACK_HEADPHONE);
 			if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADSET)
 				wcd_mbhc_report_plug(mbhc, 0, SND_JACK_HEADSET);
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_HEADSET);
 #else
 		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_UNSUPPORTED);
@@ -1164,7 +1166,7 @@ static void wcd_enable_mbhc_supply(struct wcd_mbhc *mbhc,
 		} else if (plug_type == MBHC_PLUG_TYPE_HEADPHONE) {
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_CS);
 		} else {
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
 #else
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_NONE);
@@ -1599,7 +1601,7 @@ static void wcd_mbhc_detect_plug_type(struct wcd_mbhc *mbhc)
 	pr_debug("%s: leave\n", __func__);
 }
 
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 int hph_ext_en_gpio = -1;
 int hph_ext_sw_gpio = -1;
 #endif
@@ -1621,24 +1623,6 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 		pr_debug("%s: button press is canceled\n", __func__);
 
 	WCD_MBHC_REG_READ(WCD_MBHC_MECH_DETECTION_TYPE, detection_type);
-
-#ifdef CONFIG_MACH_ASUS_X00T
-	#if 0
-	pr_err("%s: %s external headphone switch\n", __func__,detection_type ? "Enable" : "Disable");
-
-	if (!gpio_is_valid(hph_ext_en_gpio) || !gpio_is_valid(hph_ext_sw_gpio)) {
-		pr_err("%s: Invalid gpio: %d,%d\n", __func__,hph_ext_en_gpio,hph_ext_sw_gpio);
-	}
-
-	if (detection_type) {
-		gpio_direction_output(hph_ext_en_gpio, 1);
-		gpio_direction_output(hph_ext_sw_gpio, 1);
-	} else {
-		gpio_direction_output(hph_ext_sw_gpio, 0);
-		gpio_direction_output(hph_ext_en_gpio, 0);
-	}
-	#endif
-#endif
 
 	/* Set the detection type appropriately */
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_MECH_DETECTION_TYPE,
@@ -2016,8 +2000,13 @@ static void wcd_btn_lpress_fn(struct work_struct *work)
 
 	WCD_MBHC_REG_READ(WCD_MBHC_BTN_RESULT, btn_result);
 	if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADSET) {
+#ifdef CONFIG_MACH_ASUS_X00TD
+		pr_debug("%s: Reporting long button press event, btn_result: %d %x\n",
+			 __func__, btn_result, mbhc->buttons_pressed);
+#else
 		pr_debug("%s: Reporting long button press event, btn_result: %d\n",
 			 __func__, btn_result);
+#endif
 		wcd_mbhc_jack_report(mbhc, &mbhc->button_jack,
 				mbhc->buttons_pressed, mbhc->buttons_pressed);
 	}
@@ -2823,16 +2812,18 @@ void wcd_mbhc_stop(struct wcd_mbhc *mbhc)
 }
 EXPORT_SYMBOL(wcd_mbhc_stop);
 
-#ifdef CONFIG_MACH_ASUS_X00T
-static ssize_t show_hp_state(struct device *dev,struct device_attribute *attr, char *buf)
+#ifdef CONFIG_MACH_ASUS_X00TD
+static ssize_t show_hp_state(struct device *dev, struct device_attribute *attr,
+				char *buf)
 {
 	int ret = 0;
 
-	ret = snprintf(buf, sizeof(int), "%d\n",hph_state);
+	ret = snprintf(buf, sizeof(int), "%d\n", hph_state);
+
 	return ret;
 }
 
-static DEVICE_ATTR(hp_state, S_IRUGO, show_hp_state,NULL);
+static DEVICE_ATTR(hp_state, S_IRUGO, show_hp_state, NULL);
 #endif
 
 /*
@@ -2847,15 +2838,15 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 		      bool impedance_det_en)
 {
 	int ret = 0;
-#ifdef CONFIG_MACH_ASUS_X00T
-	int ret_hp =0;
-#endif
 	int hph_swh = 0;
 	int gnd_swh = 0;
 	u32 hph_moist_config[3];
 	struct snd_soc_card *card = codec->component.card;
 	const char *hph_switch = "qcom,msm-mbhc-hphl-swh";
 	const char *gnd_switch = "qcom,msm-mbhc-gnd-swh";
+#ifdef CONFIG_MACH_ASUS_X00TD
+	int ret_hp = 0;
+#endif
 
 	pr_debug("%s: enter\n", __func__);
 
@@ -3050,9 +3041,11 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 		       mbhc->intr_ids->hph_right_ocp);
 		goto err_hphr_ocp_irq;
 	}
-#ifdef CONFIG_MACH_ASUS_X00T
-	ret_hp = sysfs_create_file(&card->dev->kobj,&dev_attr_hp_state.attr);
+
+#ifdef CONFIG_MACH_ASUS_X00TD
+	ret_hp = sysfs_create_file(&card->dev->kobj, &dev_attr_hp_state.attr);
 #endif
+
 	pr_debug("%s: leave ret %d\n", __func__, ret);
 	return ret;
 

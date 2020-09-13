@@ -76,7 +76,6 @@ struct cpuidle_device {
 	unsigned int		enabled:1;
 	unsigned int		cpu;
 
-	int			last_state_idx;
 	int			last_residency;
 	struct cpuidle_state_usage	states_usage[CPUIDLE_STATE_MAX];
 	struct cpuidle_state_kobj *kobjs[CPUIDLE_STATE_MAX];
@@ -251,6 +250,14 @@ static inline int cpuidle_register_governor(struct cpuidle_governor *gov)
 #define CPUIDLE_DRIVER_STATE_START	1
 #else
 #define CPUIDLE_DRIVER_STATE_START	0
+#endif
+
+#ifdef CONFIG_SMP
+void cpuidle_set_idle_cpu(unsigned int cpu);
+void cpuidle_clear_idle_cpu(unsigned int cpu);
+#else
+static inline void cpuidle_set_idle_cpu(unsigned int cpu) { }
+static inline void cpuidle_clear_idle_cpu(unsigned int cpu) { }
 #endif
 
 #endif /* _LINUX_CPUIDLE_H */

@@ -585,17 +585,17 @@ static struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
 		/* if the caller didn't specify this heap id */
 		if (!((1 << heap->id) & heap_id_mask))
 			continue;
-//		trace_ion_alloc_buffer_start(client->name, heap->name, len,
-//					     heap_id_mask, flags);
+		trace_ion_alloc_buffer_start(client->name, heap->name, len,
+					     heap_id_mask, flags);
 		buffer = ion_buffer_create(heap, dev, len, align, flags);
-//		trace_ion_alloc_buffer_end(client->name, heap->name, len,
-//					   heap_id_mask, flags);
+		trace_ion_alloc_buffer_end(client->name, heap->name, len,
+					   heap_id_mask, flags);
 		if (!IS_ERR(buffer))
 			break;
 
-//		trace_ion_alloc_buffer_fallback(client->name, heap->name, len,
-//					    heap_id_mask, flags,
-//					    PTR_ERR(buffer));
+		trace_ion_alloc_buffer_fallback(client->name, heap->name, len,
+					    heap_id_mask, flags,
+					    PTR_ERR(buffer));
 		if (dbg_str_idx < MAX_DBG_STR_LEN) {
 			unsigned int len_left = MAX_DBG_STR_LEN-dbg_str_idx-1;
 			int ret_value = snprintf(&dbg_str[dbg_str_idx],
@@ -615,15 +615,15 @@ static struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
 	up_read(&dev->lock);
 
 	if (buffer == NULL) {
-//		trace_ion_alloc_buffer_fail(client->name, dbg_str, len,
-//					    heap_id_mask, flags, -ENODEV);
+		trace_ion_alloc_buffer_fail(client->name, dbg_str, len,
+					    heap_id_mask, flags, -ENODEV);
 		return ERR_PTR(-ENODEV);
 	}
 
 	if (IS_ERR(buffer)) {
-//		trace_ion_alloc_buffer_fail(client->name, dbg_str, len,
-//					    heap_id_mask, flags,
-//					    PTR_ERR(buffer));
+		trace_ion_alloc_buffer_fail(client->name, dbg_str, len,
+					    heap_id_mask, flags,
+					    PTR_ERR(buffer));
 		pr_debug("ION is unable to allocate 0x%zx bytes (alignment: 0x%zx) from heap(s) %sfor client %s\n",
 			len, align, dbg_str, client->name);
 		return ERR_CAST(buffer);
@@ -1407,15 +1407,6 @@ static void ion_dma_buf_end_cpu_access(struct dma_buf *dmabuf, size_t start,
 	mutex_unlock(&buffer->lock);
 }
 
-static int ion_dma_buf_get_flags(struct dma_buf *dmabuf,
-				 unsigned long *flags)
-{
-	struct ion_buffer *buffer = dmabuf->priv;
-	*flags = buffer->flags;
-
- 	return 0;
-}
-
 static struct dma_buf_ops dma_buf_ops = {
 	.map_dma_buf = ion_map_dma_buf,
 	.unmap_dma_buf = ion_unmap_dma_buf,
@@ -1427,7 +1418,6 @@ static struct dma_buf_ops dma_buf_ops = {
 	.kunmap_atomic = ion_dma_buf_kunmap,
 	.kmap = ion_dma_buf_kmap,
 	.kunmap = ion_dma_buf_kunmap,
-	.get_flags = ion_dma_buf_get_flags,
 };
 
 static struct dma_buf *__ion_share_dma_buf(struct ion_client *client,

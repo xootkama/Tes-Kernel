@@ -27,6 +27,7 @@
 #include <linux/percpu.h>
 #include <linux/hardirq.h>
 #include <linux/mutex.h>
+#include <linux/prefetch.h>
 #include <asm/byteorder.h>
 #include <asm/qspinlock.h>
 
@@ -450,6 +451,7 @@ queue:
 	 * p,*,* -> n,*,*
 	 */
 	old = xchg_tail(lock, tail);
+	next = NULL;
 
 	/*
 	 * if there was a previous node; link it and wait until reaching the
@@ -461,6 +463,16 @@ queue:
 
 		pv_wait_node(node);
 		arch_mcs_spin_lock_contended(&node->locked);
+
+		/*
+		 * While waiting for the MCS lock, the next pointer may have
+		 * been set by another lock waiter. We optimistically load
+		 * the next pointer & prefetch the cacheline for writing
+		 * to reduce latency in the upcoming MCS unlock operation.
+		 */
+		next = READ_ONCE(node->next);
+		if (next)
+			prefetchw(next);
 	}
 
 	/*
@@ -502,10 +514,12 @@ queue:
 	}
 
 	/*
-	 * contended path; wait for next, release.
+	 * contended path; wait for next if not observed yet, release.
 	 */
-	while (!(next = READ_ONCE(node->next)))
-		cpu_relax();
+	if (!next) {
+		while (!(next = READ_ONCE(node->next)))
+			cpu_relax();
+	}
 
 	arch_mcs_spin_unlock_contended(&next->locked);
 	pv_kick_node(lock, next);
@@ -514,7 +528,7 @@ release:
 	/*
 	 * release the node
 	 */
-	this_cpu_dec(mcs_nodes[0].count);
+	__this_cpu_dec(mcs_nodes[0].count);
 }
 EXPORT_SYMBOL(queued_spin_lock_slowpath);
 

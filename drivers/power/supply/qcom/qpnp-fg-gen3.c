@@ -20,9 +20,11 @@
 #include <linux/platform_device.h>
 #include <linux/iio/consumer.h>
 #include <linux/qpnp/qpnp-revid.h>
+#ifdef CONFIG_MACH_ASUS_X00TD
+#include <linux/switch.h>
+#endif
 #include "fg-core.h"
 #include "fg-reg.h"
-#include <linux/qpnp/qpnp-adc.h>
 
 #define FG_GEN3_DEV_NAME	"qcom,fg-gen3"
 
@@ -409,6 +411,13 @@ module_param_named(
 static int fg_restart;
 static bool fg_sram_dump;
 
+#ifdef CONFIG_MACH_ASUS_X00TD
+struct battery_name {
+	struct switch_dev battery_switch_dev;
+	char battery_name_type[100];
+} battery_name;
+#endif
+
 /* All getters HERE */
 
 #define VOLTAGE_15BIT_MASK	GENMASK(14, 0)
@@ -637,33 +646,24 @@ static int fg_get_jeita_threshold(struct fg_chip *chip,
 #define BATT_TEMP_DENR		1
 static int fg_get_battery_temp(struct fg_chip *chip, int *val)
 {
-	int rc = 0;
-	int64_t temp;
-	struct qpnp_vadc_result result;
+	int rc = 0, temp;
+	u8 buf[2];
 
-	chip->vadc_dev = qpnp_get_vadc(chip->dev, "vadc_therm");
-
-	if (IS_ERR(chip->vadc_dev)) {
-		rc = PTR_ERR(chip->vadc_dev);
-		if (rc != -EPROBE_DEFER)
-			pr_err("VADC property: vadc_therm missing\n");
+	rc = fg_read(chip, BATT_INFO_BATT_TEMP_LSB(chip), buf, 2);
+	if (rc < 0) {
+		pr_err("failed to read addr=0x%04x, rc=%d\n",
+			BATT_INFO_BATT_TEMP_LSB(chip), rc);
 		return rc;
 	}
 
+	temp = ((buf[1] & BATT_TEMP_MSB_MASK) << 8) |
+		(buf[0] & BATT_TEMP_LSB_MASK);
+	temp = DIV_ROUND_CLOSEST(temp, 4);
 
-	rc = qpnp_vadc_read(chip->vadc_dev, VADC_AMUX_THM3_PU2, &result);
-	if (!rc) {
-		temp = result.physical;
-		/* Value is in DegreeC; Convert it to deciDegC.
-		   Also, add an offset of -20 deciDegC, to report
-		   a more probable battery temperature. */
-		temp = (temp * 10) - 20;
-		*val = temp;
-		return rc;
-	} else {
-		pr_err("Unable to read battery_temp\n");
-		return rc;
-	}
+	/* Value is in Kelvin; Convert it to deciDegC */
+	temp = (temp - 273) * 10;
+	*val = temp;
+	return 0;
 }
 
 static int fg_get_battery_resistance(struct fg_chip *chip, int *val)
@@ -953,6 +953,31 @@ static int fg_batt_missing_config(struct fg_chip *chip, bool enable)
 	return rc;
 }
 
+#ifdef CONFIG_MACH_ASUS_X00TD
+ssize_t battery_print_name(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "%s\n", battery_name.battery_name_type);
+}
+
+static int battery_switch_register(void)
+{
+	int ret;
+
+	battery_name.battery_switch_dev.name = "battery";
+	battery_name.battery_switch_dev.print_name = battery_print_name;
+
+	ret = switch_dev_register(&battery_name.battery_switch_dev);
+	if (ret < 0)
+		return ret;
+
+	battery_name.battery_switch_dev.state = 0;
+	switch_set_state(&battery_name.battery_switch_dev,
+				battery_name.battery_switch_dev.state);
+
+	return 0;
+}
+#endif /* CONFIG_MACH_ASUS_X00TD */
+
 static int fg_get_batt_id(struct fg_chip *chip)
 {
 	int rc, ret, batt_id = 0;
@@ -1017,6 +1042,11 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 		pr_err("battery type unavailable, rc:%d\n", rc);
 		return rc;
 	}
+
+#ifdef CONFIG_MACH_ASUS_X00TD
+	strcpy(battery_name.battery_name_type, chip->bp.batt_type_str);
+	battery_switch_register();
+#endif
 
 	rc = of_property_read_u32(profile_node, "qcom,max-voltage-uv",
 			&chip->bp.float_volt_uv);
@@ -2115,15 +2145,7 @@ static int fg_adjust_recharge_soc(struct fg_chip *chip)
 				chip->recharge_soc_adjusted = true;
 			} else {
 				/* adjusted already, do nothing */
-				if (chip->health != POWER_SUPPLY_HEALTH_GOOD)
-					return 0;
-
-				/*
-				 * Device is out of JEITA so restore the
-				 * default value
-				 */
-				new_recharge_soc = recharge_soc;
-				chip->recharge_soc_adjusted = false;
+				return 0;
 			}
 		} else {
 			if (!chip->recharge_soc_adjusted)
@@ -2824,6 +2846,7 @@ static void status_change_work(struct work_struct *work)
 		pr_err("Error in getting charging status, rc=%d\n", rc);
 		goto out;
 	}
+
 
 	chip->charge_status = prop.intval;
 	rc = power_supply_get_property(chip->batt_psy,
@@ -4445,6 +4468,7 @@ static int fg_memif_init(struct fg_chip *chip)
 	return fg_ima_init(chip);
 }
 
+#ifndef CONFIG_MACH_ASUS_X00T
 static int fg_adjust_timebase(struct fg_chip *chip)
 {
 	int rc = 0, die_temp;
@@ -4478,6 +4502,7 @@ static int fg_adjust_timebase(struct fg_chip *chip)
 
 	return 0;
 }
+#endif
 
 /* INTERRUPT HANDLERS STAY HERE */
 
@@ -4587,10 +4612,11 @@ static irqreturn_t fg_delta_batt_temp_irq_handler(int irq, void *data)
 	chip->health = prop.intval;
 
 	if (chip->last_batt_temp != batt_temp) {
+#ifndef CONFIG_MACH_ASUS_X00T
 		rc = fg_adjust_timebase(chip);
 		if (rc < 0)
 			pr_err("Error in adjusting timebase, rc=%d\n", rc);
-
+#endif
 		rc = fg_adjust_recharge_voltage(chip);
 		if (rc < 0)
 			pr_err("Error in adjusting recharge_voltage, rc=%d\n",
@@ -4663,11 +4689,11 @@ static irqreturn_t fg_delta_msoc_irq_handler(int irq, void *data)
 	rc = fg_esr_validate(chip);
 	if (rc < 0)
 		pr_err("Error in validating ESR, rc=%d\n", rc);
-
+#ifndef CONFIG_MACH_ASUS_X00T
 	rc = fg_adjust_timebase(chip);
 	if (rc < 0)
 		pr_err("Error in adjusting timebase, rc=%d\n", rc);
-
+#endif
 	if (batt_psy_initialized(chip))
 		power_supply_changed(chip->batt_psy);
 
@@ -4941,8 +4967,8 @@ static int fg_parse_ki_coefficients(struct fg_chip *chip)
 #define DEFAULT_RECHARGE_SOC_THR	95
 #define DEFAULT_BATT_TEMP_COLD		0
 #define DEFAULT_BATT_TEMP_COOL		5
-#define DEFAULT_BATT_TEMP_WARM		80
-#define DEFAULT_BATT_TEMP_HOT		90
+#define DEFAULT_BATT_TEMP_WARM		45
+#define DEFAULT_BATT_TEMP_HOT		50
 #define DEFAULT_CL_START_SOC		15
 #define DEFAULT_CL_MIN_TEMP_DECIDEGC	150
 #define DEFAULT_CL_MAX_TEMP_DECIDEGC	450
@@ -5147,8 +5173,6 @@ static int fg_parse_dt(struct fg_chip *chip)
 			pr_warn("Error reading Jeita thresholds, default values will be used rc:%d\n",
 				rc);
 	}
-	chip->dt.jeita_thresholds[JEITA_WARM] = 97;
-	chip->dt.jeita_thresholds[JEITA_HOT] = 97;
 
 	if (of_property_count_elems_of_size(node,
 		"qcom,battery-thermal-coefficients",
@@ -5618,6 +5642,21 @@ static void fg_gen3_shutdown(struct platform_device *pdev)
 {
 	struct fg_chip *chip = dev_get_drvdata(&pdev->dev);
 	int rc, bsoc;
+#ifdef CONFIG_MACH_ASUS_X00TD
+	u8 status;
+
+	rc = fg_read(chip, BATT_INFO_BATT_MISS_CFG(chip), &status, 1);
+	pr_debug("fg_gen3_shutdown status0=%d\n", status);
+
+	rc = fg_masked_write(chip, BATT_INFO_BATT_MISS_CFG(chip),
+				BM_FROM_BATT_ID_BIT, 0);
+	if (rc < 0)
+		pr_err("Error in writing to %04x, rc=%d\n",
+			BATT_INFO_BATT_MISS_CFG(chip), rc);
+
+	rc = fg_read(chip, BATT_INFO_BATT_MISS_CFG(chip), &status, 1);
+	pr_debug("fg_gen3_shutdown status1=%d\n", status);
+#endif
 
 	if (chip->charge_full) {
 		rc = fg_get_sram_prop(chip, FG_SRAM_BATT_SOC, &bsoc);

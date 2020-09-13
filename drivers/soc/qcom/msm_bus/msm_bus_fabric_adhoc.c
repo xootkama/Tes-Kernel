@@ -255,9 +255,9 @@ static int send_rpm_msg(struct msm_bus_node_device_type *ndev, int ctx)
 				 ndev->node_info->mas_rpm_id);
 			goto exit_send_rpm_msg;
 		}
-//		trace_bus_agg_bw(ndev->node_info->id,
-//			ndev->node_info->mas_rpm_id, rpm_ctx,
-//			ndev->node_bw[ctx].sum_ab);
+		trace_bus_agg_bw(ndev->node_info->id,
+			ndev->node_info->mas_rpm_id, rpm_ctx,
+			ndev->node_bw[ctx].sum_ab);
 	}
 
 	if (ndev->node_info->slv_rpm_id != -1) {
@@ -272,9 +272,9 @@ static int send_rpm_msg(struct msm_bus_node_device_type *ndev, int ctx)
 				ndev->node_info->slv_rpm_id);
 			goto exit_send_rpm_msg;
 		}
-//		trace_bus_agg_bw(ndev->node_info->id,
-//			ndev->node_info->slv_rpm_id, rpm_ctx,
-//			ndev->node_bw[ctx].sum_ab);
+		trace_bus_agg_bw(ndev->node_info->id,
+			ndev->node_info->slv_rpm_id, rpm_ctx,
+			ndev->node_bw[ctx].sum_ab);
 	}
 exit_send_rpm_msg:
 	return ret;
@@ -1263,6 +1263,7 @@ static int msm_bus_device_probe(struct platform_device *pdev)
 		ret = msm_bus_init_clk(node_dev, &pdata->info[i]);
 		if (ret) {
 			MSM_BUS_ERR("\n Failed to init bus clk. ret %d", ret);
+			msm_bus_device_remove(pdev);
 			goto exit_device_probe;
 		}
 		/*Is this a fabric device ?*/
@@ -1304,10 +1305,7 @@ static int msm_bus_device_probe(struct platform_device *pdev)
 
 	devm_kfree(&pdev->dev, pdata->info);
 	devm_kfree(&pdev->dev, pdata);
-	return 0;
-
 exit_device_probe:
-	msm_bus_device_remove(pdev);
 	return ret;
 }
 

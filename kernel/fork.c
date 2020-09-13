@@ -79,6 +79,7 @@
 #include <linux/sysctl.h>
 #include <linux/kcov.h>
 #include <linux/cpufreq_times.h>
+#include <linux/simple_lmk.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -359,6 +360,8 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 	err = arch_dup_task_struct(tsk, orig);
 	if (err)
 		goto free_stack;
+
+	tsk->flags &= ~PF_SU;
 
 	tsk->stack = stack;
 
@@ -721,6 +724,7 @@ static inline void __mmput(struct mm_struct *mm)
 	ksm_exit(mm);
 	khugepaged_exit(mm); /* must run before exit_mmap */
 	exit_mmap(mm);
+	simple_lmk_mm_freed(mm);
 	set_mm_exe_file(mm, NULL);
 	if (!list_empty(&mm->mmlist)) {
 		spin_lock(&mmlist_lock);
@@ -1705,7 +1709,7 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	threadgroup_change_end(current);
 	perf_event_fork(p);
 
-//	trace_task_newtask(p, clone_flags);
+	trace_task_newtask(p, clone_flags);
 	uprobe_copy_process(p, clone_flags);
 
 	return p;
@@ -1828,7 +1832,7 @@ long _do_fork(unsigned long clone_flags,
 
 		cpufreq_task_times_alloc(p);
 
-//		trace_sched_process_fork(current, p);
+		trace_sched_process_fork(current, p);
 
 		pid = get_task_pid(p, PIDTYPE_PID);
 		nr = pid_vnr(pid);

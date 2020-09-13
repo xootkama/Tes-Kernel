@@ -55,12 +55,12 @@ static int msm_get_read_mem_size
 		}
 		for (i = 0; i < eeprom_map->memory_map_size; i++) {
 			if (eeprom_map->mem_settings[i].i2c_operation ==
-#ifdef CONFIG_MACH_ASUS_X00T
-				MSM_CAM_READ || eeprom_map->mem_settings[i].i2c_operation ==
-				MSM_CAM_SINGLE_LOOP_READ ) {
-#else
-				MSM_CAM_READ) {
+				MSM_CAM_READ
+#ifdef CONFIG_MACH_ASUS_X00TD
+				|| eeprom_map->mem_settings[i].i2c_operation ==
+				MSM_CAM_SINGLE_LOOP_READ
 #endif
+				) {
 				size += eeprom_map->mem_settings[i].reg_data;
 			}
 		}
@@ -411,23 +411,27 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 				memptr += eeprom_map->mem_settings[i].reg_data;
 			}
 			break;
-#ifdef CONFIG_MACH_ASUS_X00T
+#ifdef CONFIG_MACH_ASUS_X00TD
 			case MSM_CAM_SINGLE_LOOP_READ: {
 				uint16_t m;
 				uint16_t read_val = 0;
+
 				e_ctrl->i2c_client.addr_type =
 					eeprom_map->mem_settings[i].addr_type;
-				for (m = 0; m < eeprom_map->mem_settings[i].reg_data;m++) {
+				for (m = 0;
+				     m < eeprom_map->mem_settings[i].reg_data;
+				     m++) {
 					rc = e_ctrl->i2c_client.i2c_func_tbl->
 						i2c_read(&(e_ctrl->i2c_client),
 					eeprom_map->mem_settings[i].reg_addr,
 						&read_val,
 					eeprom_map->mem_settings[i].data_type);
 					if (rc < 0) {
-						pr_err("%s: read failed\n",__func__);
+						pr_err("%s: read failed\n",
+							__func__);
 						goto clean_up;
 					}
-					*memptr = (uint8_t) read_val;
+					*memptr = (uint8_t)read_val;
 					memptr++;
 				}
 				msleep(eeprom_map->mem_settings[i].delay);
@@ -1701,7 +1705,7 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 	CDBG("%s qcom,eeprom-name %s, rc %d\n", __func__,
 		eb_info->eeprom_name, rc);
 	if (rc < 0) {
-		pr_err("%s failed %d\n", __func__, __LINE__);
+		pr_info("%s Run userspace_probe\n", __func__);
 		e_ctrl->userspace_probe = 1;
 	}
 

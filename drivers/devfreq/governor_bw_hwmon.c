@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -175,7 +175,7 @@ static DEVICE_ATTR(__attr, 0644, show_list_##__attr, store_list_##__attr)
 #define MAX_MS	500U
 
 /* Returns MBps of read/writes for the sampling window. */
-static unsigned int bytes_to_mbps(long long bytes, unsigned int us)
+static unsigned long bytes_to_mbps(unsigned long long bytes, unsigned int us)
 {
 	bytes *= USEC_PER_SEC;
 	do_div(bytes, us);
@@ -233,10 +233,10 @@ static int __bw_hwmon_sw_sample_end(struct bw_hwmon *hwmon)
 	node->wake = wake;
 	node->sampled = true;
 
-//	trace_bw_hwmon_meas(dev_name(df->dev.parent),
-//				mbps,
-//				us,
-//				wake);
+	trace_bw_hwmon_meas(dev_name(df->dev.parent),
+				mbps,
+				us,
+				wake);
 
 	return wake;
 }
@@ -269,10 +269,10 @@ static int __bw_hwmon_hw_sample_end(struct bw_hwmon *hwmon)
 	node->wake = wake;
 	node->sampled = true;
 
-//	trace_bw_hwmon_meas(dev_name(df->dev.parent),
-//				mbps,
-//				node->sample_ms * USEC_PER_MSEC,
-//				wake);
+	trace_bw_hwmon_meas(dev_name(df->dev.parent),
+				mbps,
+				node->sample_ms * USEC_PER_MSEC,
+				wake);
 
 	return 1;
 }
@@ -485,11 +485,11 @@ static unsigned long get_bw_and_set_irq(struct hwmon_node *node,
 		*ab = roundup(new_bw, node->bw_step);
 
 	*freq = (new_bw * 100) / io_percent;
-//	trace_bw_hwmon_update(dev_name(node->hw->df->dev.parent),
-//				new_bw,
-//				*freq,
-//				hw->up_wake_mbps,
-//				hw->down_wake_mbps);
+	trace_bw_hwmon_update(dev_name(node->hw->df->dev.parent),
+				new_bw,
+				*freq,
+				hw->up_wake_mbps,
+				hw->down_wake_mbps);
 	return req_mbps;
 }
 
@@ -866,7 +866,6 @@ static int devfreq_bw_hwmon_ev_handler(struct devfreq *df,
 		if (ret) {
 			dev_err(df->dev.parent,
 				"Unable to resume HW monitor (%d)\n", ret);
-			mutex_unlock(&sync_lock);
 			return ret;
 		}
 		mutex_unlock(&sync_lock);
