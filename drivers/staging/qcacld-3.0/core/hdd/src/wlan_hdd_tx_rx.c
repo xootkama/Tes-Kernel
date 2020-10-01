@@ -38,7 +38,6 @@
 #include <net/cfg80211.h>
 #include <net/ieee80211_radiotap.h>
 #include "sap_api.h"
-#include "sme_power_save_api.h"
 #include "wlan_hdd_wmm.h"
 #include "wlan_hdd_tdls.h"
 #include <wlan_hdd_ipa.h>
@@ -52,6 +51,7 @@
 #include <wlan_hdd_tsf.h>
 #include <net/tcp.h>
 #include "wma_api.h"
+#include "../../sme/inc/sme_power_save_api.h"
 
 #ifdef QCA_LL_TX_FLOW_CONTROL_V2
 /*

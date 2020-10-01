@@ -146,25 +146,6 @@ static struct cdev wlan_hdd_state_cdev;
 static struct class *class;
 static dev_t device;
 #ifndef MODULE
-static struct gwlan_loader *wlan_loader;
-struct gwlan_loader {
-	struct kobject *boot_wlan_obj;
-	struct attribute_group *attr_group;
-};
-
-static ssize_t wlan_boot_cb_fake(struct kobject *kobj,
-			    struct kobj_attribute *attr,
-			    const char *buf,
-			    size_t count);
-
-static struct kobj_attribute wlan_boot_attribute =
-	__ATTR(boot_wlan, 0220, NULL, wlan_boot_cb_fake);
-
-static struct attribute *attrs[] = {
-	&wlan_boot_attribute.attr,
-	NULL,
-};
-
 static struct work_struct boot_work;
 #endif
 
@@ -1245,8 +1226,12 @@ static void hdd_update_tgt_ht_cap(hdd_context_t *hdd_ctx,
 
 	enable_tx_stbc = pconfig->enableTxSTBC;
 
-	if (pconfig->enable2x2 && (cfg->num_rf_chains == 2))
+	if (pconfig->enable2x2 && (cfg->num_rf_chains == 2)) {
 		pconfig->enable2x2 = 1;
+	} else {
+		pconfig->enable2x2 = 0;
+		enable_tx_stbc = 0;
+	}
 
 	if (!(cfg->ht_tx_stbc && pconfig->enable2x2))
 		enable_tx_stbc = 0;
@@ -5145,6 +5130,7 @@ QDF_STATUS hdd_stop_adapter(hdd_context_t *hdd_ctx, hdd_adapter_t *adapter,
 			wlan_hdd_del_station(adapter);
 
 		hdd_ipa_flush(hdd_ctx);
+		qdf_flush_work(&hdd_ctx->sap_pre_cac_work);
 
 	case QDF_P2P_GO_MODE:
 		if (hdd_ctx->config->conc_custom_rule1 &&
@@ -5315,7 +5301,7 @@ QDF_STATUS hdd_stop_all_adapters(hdd_context_t *hdd_ctx, bool close_session)
 
 	ENTER();
 
-	cds_flush_work(&hdd_ctx->sap_pre_cac_work);
+	qdf_flush_work(&hdd_ctx->sap_pre_cac_work);
 	cds_flush_sta_ap_intf_work(hdd_ctx);
 
 	status = hdd_get_front_adapter(hdd_ctx, &adapterNode);
@@ -5367,7 +5353,7 @@ QDF_STATUS hdd_reset_all_adapters(hdd_context_t *hdd_ctx)
 
 	ENTER();
 
-	cds_flush_work(&hdd_ctx->sap_pre_cac_work);
+	qdf_flush_work(&hdd_ctx->sap_pre_cac_work);
 	cds_flush_sta_ap_intf_work(hdd_ctx);
 
 	status = hdd_get_front_adapter(hdd_ctx, &adapterNode);
@@ -8783,7 +8769,8 @@ void hdd_indicate_mgmt_frame(tSirSmeMgmtFrameInd *frame_ind)
 						frame_ind->frameBuf,
 						frame_ind->frameType,
 						frame_ind->rxChan,
-						frame_ind->rxRssi);
+						frame_ind->rxRssi,
+						frame_ind->rx_flags);
 			}
 			status = hdd_get_next_adapter(hdd_ctx,
 						adapter_node, &next);
@@ -8802,7 +8789,8 @@ void hdd_indicate_mgmt_frame(tSirSmeMgmtFrameInd *frame_ind)
 						frame_ind->frameBuf,
 						frame_ind->frameType,
 						frame_ind->rxChan,
-						frame_ind->rxRssi);
+						frame_ind->rxRssi,
+						frame_ind->rx_flags);
 }
 
 /**
@@ -12807,7 +12795,7 @@ static ssize_t wlan_hdd_state_ctrl_param_write(struct file *filp,
 		goto exit;
 	}
 
-	if (!cds_is_driver_loaded()) {
+	if (!cds_is_driver_loaded() || cds_is_driver_recovering()) {
 		init_completion(&wlan_start_comp);
 		rc = wait_for_completion_timeout(&wlan_start_comp,
 				msecs_to_jiffies(HDD_WLAN_START_WAIT_TIME));
@@ -12944,24 +12932,6 @@ err_hdd_init:
 	return ret;
 }
 
-/**
- * wlan_boot_cb_fake() - Fake wlan boot callback
- * @kobj:      object whose directory we're creating the link in.
- * @attr:      yes you are going to read this
- * @buff:      oh I see you reading this
- * @count:     this is fake function you know
- *
- * just return count for the sake of it.
- *
- */
-static ssize_t wlan_boot_cb_fake(struct kobject *kobj,
-			    struct kobj_attribute *attr,
-			    const char *buf,
-			    size_t count)
-{
-	return count;
-}
-
 #ifdef MODULE
 /**
  * __hdd_module_exit - Module exit helper
@@ -13023,34 +12993,6 @@ static void __exit hdd_module_exit(void)
 #else
 static void wlan_hdd_boot_fn(struct work_struct *work)
 {
-	int ret;
-
-	wlan_loader = kzalloc(sizeof(*wlan_loader), GFP_KERNEL);
-	if (!wlan_loader)
-		goto hdd_init;
-
-	wlan_loader->attr_group = kzalloc(sizeof(*(wlan_loader->attr_group)),
-					  GFP_KERNEL);
-	if (!wlan_loader->attr_group)
-		goto hdd_init;
-
-	wlan_loader->attr_group->attrs = attrs;
-
-	wlan_loader->boot_wlan_obj = kobject_create_and_add("boot_wlan",
-							    kernel_kobj);
-	if (!wlan_loader->boot_wlan_obj) {
-		pr_err("%s: sysfs create and add failed\n", __func__);
-		goto hdd_init;
-	}
-
-	ret = sysfs_create_group(wlan_loader->boot_wlan_obj,
-				 wlan_loader->attr_group);
-	if (ret) {
-		pr_err("%s: sysfs create group failed %d\n", __func__, ret);
-		goto hdd_init;
-	}
-
-hdd_init:
 	__hdd_module_init();
 }
 
