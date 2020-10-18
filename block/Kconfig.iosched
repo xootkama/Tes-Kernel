@@ -73,6 +73,21 @@ config BFQ_GROUP_IOSCHED
 	Enable hierarchical scheduling in BFQ, using the blkio
 	(cgroups-v1) or io (cgroups-v2) controller.
 
+config IOSCHED_ANXIETY
+	tristate "Anxiety I/O Scheduler"
+	default y
+	---help---
+	  The purpose of Anxiety is to improve throughput on latency-sensitive
+	  tasks on embedded flash storage devices. On modern devices, embedded
+	  systems contain relatively fast storage, so spending too much time
+	  with complicated queue-shifting scheduling algorithms may end up
+	  bottlenecking the device. Similarly to the No-op I/O scheduler,
+	  Anxiety works with a FIFO queue; however, Anxiety includes basic
+	  request logic based on READ v. WRITE requests. WRITE requests are
+	  starved at a fixed ratio, defined as the `max_writes_starved` tunable.
+	  READ requests are given priority over WRITE requests due to their
+	  essentiality in determining load-time latency.
+
 choice
 	prompt "Default I/O scheduler"
 	default DEFAULT_MAPLE
@@ -97,10 +112,13 @@ choice
 		  interactive and soft real-time applications.
 
 	config DEFAULT_NOOP
-		bool "No-op"
+		bool "No-op" if IOSCHED_NOOP=y
 
 	config DEFAULT_MAPLE
 		bool "Maple" if IOSCHED_MAPLE=y
+		
+	config DEFAULT_ANXIETY
+		bool "Anxiety" if IOSCHED_ANXIETY=y
 
 endchoice
 
@@ -111,6 +129,7 @@ config DEFAULT_IOSCHED
 	default "bfq" if DEFAULT_BFQ
 	default "noop" if DEFAULT_NOOP
 	default "maple" if DEFAULT_MAPLE
+	default "anxiety" if DEFAULT_ANXIETY
 
 endmenu
 
