@@ -32,8 +32,6 @@ rm -rf "$TOP/ZIPS/stock/Image.gz-dtb"
 rm -rf "$TOP/ZIPS/Kernel_ZIP/STOCK"
 
 make \
-    clean \
-    mrproper \
     O=out \
     ARCH=arm64 \
     SUBARCH=ARM64 \
