@@ -2158,6 +2158,13 @@ config FPE_NWFPE
 	  You may say N here if you are going to load the Acorn FPEmulator
 	  early in the bootup.
 
+config FORCE_FAST_CHARGE
+	bool "Force AC charge mode at will"
+	default y
+	help
+	  A simple sysfs interface to force adapters that
+	  are detected as USB to charge as AC.
+	  
 config FPE_NWFPE_XP
 	bool "Support extended precision"
 	depends on FPE_NWFPE
