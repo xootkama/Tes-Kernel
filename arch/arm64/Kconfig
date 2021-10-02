@@ -1254,6 +1254,13 @@ config COMPAT_VDSO
 	  the compat vDSO without modification. It also provides sigreturn
 	  trampolines, replacing the sigreturn page.
 
+config FORCE_FAST_CHARGE
+	bool "Force AC charge mode at will"
+	default y
+	help
+	  A simple sysfs interface to force adapters that
+	  are detected as USB to charge as AC.
+	  
 config CROSS_COMPILE_ARM32
 	string "32-bit toolchain prefix"
 	help
